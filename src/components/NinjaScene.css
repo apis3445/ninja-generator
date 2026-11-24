@@ -1,0 +1,152 @@
+/* ── Scene shell ──────────────────────────────────────────────────── */
+.scene {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  background: #fff;
+}
+
+/* ── Navbar ───────────────────────────────────────────────────────── */
+.scene-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  height: 56px;
+  background: #3f51b5;
+  box-shadow: 0 2px 12px rgba(63, 81, 181, 0.45);
+  display: flex;
+  align-items: center;
+}
+.nav-inner {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.nav-brand {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.65);
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+  padding-right: 1rem;
+}
+.nav-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+
+/* ── Animation switcher ───────────────────────────────────────────── */
+.anim-bar {
+  position: absolute;
+  bottom: 5.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.3rem;
+  background: rgba(15, 17, 23, 0.82);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  padding: 0.35rem;
+}
+.anim-btn {
+  padding: 0.42rem 0.85rem;
+  border-radius: 0.45rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.anim-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+.anim-btn.active {
+  background: #17a589;
+  border-color: #17a589;
+  color: #ffffff;
+}
+
+/* ── Bottom controls ──────────────────────────────────────────────── */
+.controls {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.625rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Shared pill base */
+.btn-back,
+.btn-download-glb {
+  padding: 0.7rem 1.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: none;
+  text-decoration: none;
+}
+
+/* "← Generate another" */
+.btn-back {
+  background: #0d6efd;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.9);
+}
+.btn-back:hover {
+  background: #0b5ed7;
+  color: #fff;
+}
+
+/* "⬇ Download GLB" */
+.btn-download-glb {
+  background: #17a589;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(23, 165, 137, 0.35);
+}
+.btn-download-glb:hover {
+  background: #148f76;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(23, 165, 137, 0.45);
+}
+
+/* ── Error states ─────────────────────────────────────────────────── */
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 1rem;
+  color: #1e293b;
+  text-align: center;
+  padding: 2rem;
+}
+.error-msg {
+  color: #dc2626;
+  font-size: 1rem;
+}
