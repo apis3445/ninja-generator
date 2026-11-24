@@ -5,7 +5,6 @@ export type NinjaAnswers = {
   style: 'shadow' | 'crimson' | 'jade' | 'royal' | 'ghost'
   clan: 'sprinters' | 'phantoms' | 'guardians' | 'fast-and-risky'
   gender: 'female' | 'male'
-  provider: 'tripo' | 'meshy'
 }
 
 export type NinjaAnimation = 'idle' | 'jump' | 'kick'
@@ -61,7 +60,7 @@ const genderMap: Record<NinjaAnswers['gender'], string> = {
 }
 
 
-// A-pose is required for Meshy rigging. Tripo skips rigging so it gets a random dynamic pose.
+// Neutral A-pose so the model can be auto-rigged and animated.
 const APOSE = 'standing in a strict A-pose: both arms angled downward at exactly 45 degrees from the shoulders (NOT horizontal, NOT T-pose), palms facing inward, legs straight and slightly apart, facing directly forward, neutral expression, NO action pose, NO dynamic stance, NO T-pose, arms must NOT be horizontal'
 
 const SPECIALTY_POSE: Record<NinjaAnswers['specialty'], string> = {
@@ -74,7 +73,7 @@ const SPECIALTY_POSE: Record<NinjaAnswers['specialty'], string> = {
   api: 'in a sharp forward punch strike pose: arm extended in a precise single-endpoint strike, body turned sideways in a clean technical stance, opposite hand open in a ready position like awaiting an API response, focused analytical expression, full body shown mid-strike',
 }
 
-export function buildNinjaPrompt(answers: NinjaAnswers, provider: 'meshy' | 'tripo' = 'meshy'): string {
+export function buildNinjaPrompt(answers: NinjaAnswers): string {
 
   return [
     `A ${genderMap[answers.gender]} ${rankMap[answers.rank]} ninja,`,

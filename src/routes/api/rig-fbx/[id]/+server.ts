@@ -6,7 +6,7 @@ const TRIPO_BASE = 'https://api.tripo3d.ai/v2/openapi'
 export async function POST({ params }: { params: { id: string } }) {
   // Minimal body — out_format fbx only, no extra fields that may conflict
   const body = {
-    type: 'rig_model',
+    type: 'animate_rig',
     original_model_task_id: params.id,
     out_format: 'fbx',
     spec: 'mixamo'

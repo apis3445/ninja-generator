@@ -8,14 +8,12 @@
   const ninjaId = $page.params.id as string;
   const animation = ($page.url.searchParams.get("animation") ??
     "idle") as NinjaAnimation;
-  const provider = $page.url.searchParams.get("provider") ?? "tripo";
   const specialty = ($page.url.searchParams.get("specialty") ??
     "automation") as NinjaAnswers["specialty"];
-  const type = $page.url.searchParams.get("type") ?? "image-to-3d";
 
   type Status = "pending" | "processing" | "succeeded" | "failed";
   let status: Status = "pending";
-  let stage: "model" | "refine" | "rig" = "model";
+  let stage: "model" | "rig" = "model";
   let modelUrl: string | null = null;
   let pendingModelUrl: string | null = null;
   let revealing = false;
@@ -64,31 +62,16 @@
 
   $: config = specialtyColors[specialty] ?? specialtyColors.automation;
 
-  // Pipeline steps shown during generation (Meshy only — Tripo is one stage)
-  const pipelineSteps =
-    provider === "tripo"
-      ? []
-      : type === "image-to-3d"
-        ? [
-            { key: "model", label: "Sculpt" },
-            { key: "rig", label: "Rig" },
-          ]
-        : [
-            { key: "model", label: "Sculpt" },
-            { key: "refine", label: "Texture" },
-            { key: "rig", label: "Rig" },
-          ];
+  // Pipeline steps shown during generation
+  const pipelineSteps = [
+    { key: "model", label: "Sculpt" },
+    { key: "rig", label: "Rig" },
+  ];
   $: stepIndex = pipelineSteps.findIndex((s) => s.key === stage);
 
-  function poll(
-    taskId: string,
-    pollType: string,
-    onSucceeded: (data: any) => void,
-  ) {
+  function poll(taskId: string, onSucceeded: (data: any) => void) {
     const interval = setInterval(async () => {
-      const res = await fetch(
-        `/api/status/${taskId}?provider=${provider}&type=${pollType}`,
-      );
+      const res = await fetch(`/api/status/${taskId}`);
       if (!res.ok) return;
 
       const data = await res.json();
@@ -112,25 +95,21 @@
     status = "pending";
     progress = 0;
 
-    const res = await fetch(`/api/rig/${modelTaskId}?provider=${provider}`, {
-      method: "POST",
-    });
+    const res = await fetch(`/api/rig/${modelTaskId}`, { method: "POST" });
     if (!res.ok) {
       const body = await res.text();
       console.warn(
         "[ninja] Rigging API failed, falling back to unrigged model. Response:",
         body,
       );
-      const statusRes = await fetch(
-        `/api/status/${modelTaskId}?provider=${provider}&type=${type}`,
-      );
+      const statusRes = await fetch(`/api/status/${modelTaskId}`);
       if (statusRes.ok) setModel(await statusRes.json(), "unrigged-fallback");
       else status = "failed";
       return;
     }
 
     const { rigTaskId } = await res.json();
-    poll(rigTaskId, "rigging", (data) => setModel(data, "rigged"));
+    poll(rigTaskId, (data) => setModel(data, "rigged"));
   }
 
   function setModel(data: any, source = "unknown") {
@@ -144,36 +123,13 @@
   }
 
   onMount(() => {
-    // Tripo: rigging not supported — show model directly in its generated pose
-    if (provider === "tripo") {
-      return poll(ninjaId, type, (data) => setModel(data, "tripo-direct"));
-    }
-
-    // Meshy image-to-3d: model → rig
-    if (type === "image-to-3d") {
-      return poll(ninjaId, type, () => startRig(ninjaId));
-    }
-
-    // Meshy text-to-3d: model → refine → rig
-    return poll(ninjaId, type, async () => {
-      stage = "refine";
-      status = "pending";
-      progress = 0;
-
-      const res = await fetch(`/api/refine/${ninjaId}`, { method: "POST" });
-      if (!res.ok) {
-        status = "failed";
-        return;
-      }
-
-      const { taskId: refineId } = await res.json();
-      poll(refineId, "text-to-3d", () => startRig(refineId));
-    });
+    // Tripo: model → rig, then the hand-coded animations play on the rig
+    return poll(ninjaId, () => startRig(ninjaId));
   });
 </script>
 
 {#if modelUrl}
-  <NinjaScene {modelUrl} {animation} {specialty} {provider} />
+  <NinjaScene {modelUrl} {animation} {specialty} />
 {:else}
   <div
     class="page-container"
@@ -231,22 +187,14 @@
               {:else if status === "pending"}
                 Awakening the dojo...
               {:else if status === "processing"}
-                {#if provider === "tripo"}
-                  Sculpting high-fidelity ninja mesh...
-                {:else if stage === "refine"}
-                  Baking high-resolution textures...
-                {:else}
-                  Synthesizing 3D ninja geometry...
-                {/if}
+                Sculpting high-fidelity ninja mesh...
               {/if}
             </p>
             <small>
-              {#if provider === "tripo"}
-                Usually ready in ~1-2 minutes (Tripo3D)
-              {:else if stage === "rig"}
+              {#if stage === "rig"}
                 Adding bone skeleton for animations...
               {:else}
-                Usually ready in ~2 minutes (Meshy)
+                Usually ready in ~1-2 minutes (Tripo3D)
               {/if}
             </small>
           </div>

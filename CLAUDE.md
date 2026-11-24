@@ -5,86 +5,62 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev       # start dev server (also runs svelte-kit sync)
-npm run build     # production build
+npm run dev       # start dev server
+npm run build     # production build (adapter-vercel → .vercel/output/)
 npm run preview   # preview production build
-npm run check     # svelte-check + type checking
+npm run check     # svelte-kit sync + svelte-check type checking
 ```
 
 If `.svelte-kit/tsconfig.json` is missing (fresh clone), run `npx svelte-kit sync` before type checking.
 
 ## Environment variables
 
-Copy `.env.example` to `.env` and fill in:
+Copy `.env.example` to `.env` and fill in. All are private, server-side only, and read via SvelteKit's `$env/dynamic/private`.
 
-- `MESHY_API_KEY` — required; used server-side in `src/lib/meshyApi.ts`
-- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_ANON_KEY` — Supabase is a dependency but not yet wired up in the app
-- `TRIPO_API_KEY` — present in `.env.example`, not yet used
+| Variable | Used in | Notes |
+|----------|---------|-------|
+| `TRIPO_API_KEY` | `src/lib/tripoApi.ts`, `src/routes/api/rig-fbx/[id]/+server.ts` | Required. Tripo3D is the only 3D engine (model generation and rigging) |
+| `OPENAI_API_KEY` | `src/lib/openaiImage.ts` | 2D preview image engine; at least one of OpenAI/Gemini is required |
+| `GEMINI_API_KEY` | `src/lib/geminiImage.ts` | 2D preview image engine; at least one of OpenAI/Gemini is required |
+| `IMAGE_ENGINE` | `src/routes/api/generate-2d/+server.ts` | Optional, `openai` (default) or `gemini`. Falls back to whichever engine has a key |
 
 ## Architecture
 
-This is a SvelteKit app deployed to Vercel (`@sveltejs/adapter-vercel`). The core flow:
+SvelteKit 2 app built with `@sveltejs/adapter-vercel` and deployed to Vercel. It generates a "testing ninja" character: a 2D preview image first, then a rigged 3D model.
 
-1. **`/` (home)** — renders `QuestionWizard`, a 5-step form collecting dragon attributes (element, personality, size, color, age).
-2. On wizard completion, the page POSTs `DragonAnswers` to **`/api/generate`**, which builds a text prompt via `src/lib/dragonPrompt.ts` and submits it to the Meshy AI text-to-3D API. Returns a `taskId`.
-3. The user is redirected to **`/dragon/[id]`**, which polls **`/api/status/[id]`** every 3 seconds until the Meshy task reaches `succeeded` or `failed` (generation takes 30–120 seconds).
-4. On success, the page renders the GLB model URL in **`DragonScene`** using Threlte (`@threlte/core` + `@threlte/extras`) — a Three.js wrapper for Svelte.
+1. **`/` (home, `src/routes/+page.svelte`)**: renders `QuestionWizard`, which collects `NinjaAnswers` (gender, specialty, weapon, rank, style, clan).
+2. On completion the page POSTs to **`/api/generate-2d`**, which builds a prompt with `buildNinjaPrompt()` and generates a preview image with OpenAI or Gemini.
+3. The user picks an animation (`idle` / `jump` / `kick`), and the page POSTs the answers plus the preview `imageUrl` to **`/api/generate`**. That route starts a Tripo image-to-3D task (or text-to-3D when there is no image) and returns `{ taskId, ... }`.
+4. The user is redirected to **`/ninja/[id]`**, which polls **`/api/status/[id]`**, then calls **`/api/rig/[id]`** (Tripo `animate_rig`, `spec: 'mixamo'`) and polls the rig task.
+5. The rigged GLB is loaded through **`/api/proxy`**, which only allows the Tripo asset host, and rendered in `NinjaScene` → `AnimatedNinja` with Threlte (`@threlte/core` + `@threlte/extras`). Animations are hand-coded (no paid animation API), so keep the Mixamo rig spec: `AnimatedNinja` finds limbs by Mixamo bone names.
 
 ## Key files
 
 | File | Purpose |
 |------|---------|
-| `src/lib/dragonPrompt.ts` | `DragonAnswers` type, attribute→prompt-text maps, `buildDragonPrompt()`, and the `questions` array driving the wizard |
-| `src/lib/meshyApi.ts` | `createDragon(prompt)` and `getDragonStatus(taskId)` — thin wrappers around the Meshy v2 REST API |
-| `src/components/QuestionWizard.svelte` | Step-through form; dispatches `complete` event with final `DragonAnswers` |
-| `src/components/DragonScene.svelte` | Full-screen Threlte canvas with orbit controls, auto-rotation, and GLTF loader |
-| `src/routes/api/generate/+server.ts` | POST handler — builds prompt, calls Meshy, returns `{ taskId, prompt }` |
-| `src/routes/api/status/[id]/+server.ts` | GET handler — proxies Meshy task status |
+| `src/lib/ninjaPrompt.ts` | `NinjaAnswers` / `NinjaAnimation` types, attribute→prompt maps, `buildNinjaPrompt()`, `questions` (wizard), `animationOptions` |
+| `src/lib/tripoApi.ts` | Tripo v2 API: text-to-3D, image upload, image-to-3D, rigging, status |
+| `src/lib/openaiImage.ts` / `src/lib/geminiImage.ts` | 2D preview image generation |
+| `src/components/QuestionWizard.svelte` | Step-through form; dispatches `complete` with `NinjaAnswers` |
+| `src/components/NinjaScene.svelte` (+ `NinjaScene.css`) | Threlte canvas that renders the GLB model |
+| `src/components/AnimatedNinja.svelte` | Used by `NinjaScene`: loads the GLTF and animates its limb bones in code for the selected `animation` |
+| `src/components/SmokeAnimation.svelte` | Smoke reveal effect used on home and ninja pages |
+| `src/routes/api/generate-2d/+server.ts` | POST: 2D preview image |
+| `src/routes/api/generate/+server.ts` | POST: start Tripo 3D task (image or text) |
+| `src/routes/api/status/[id]/+server.ts` | GET: Tripo task status (model or rig) |
+| `src/routes/api/rig/[id]/+server.ts` | POST: start Tripo rigging |
+| `src/routes/api/rig-fbx/[id]/+server.ts` | POST: Tripo FBX (Mixamo) rig; not currently called from the UI |
+| `src/routes/api/proxy/+server.ts` | GET: allow-listed proxy for model files (optional `download` filename) |
 
-## Deploying to Google Cloud Run (no Docker required)
+## Deploying to Vercel
 
-Cloud Run's source deployment uses Google Cloud Build to build and containerize the app — no local Docker needed. The existing `gcp-build` npm script is the build hook Cloud Build calls automatically.
-
-**One-time setup**
-
-```bash
-gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com
-```
-
-**Deploy**
-
-```bash
-npm run deploy
-```
-
-This runs `gcloud run deploy ninja-generator --source . --region us-central1 --allow-unauthenticated --port 3000`. Cloud Build installs dependencies, runs `npm run gcp-build` (which runs `npm run build`), then deploys the resulting Node.js server (`build/index.js`).
-
-**Set environment variables**
-
-After the first deploy, set secrets via the Console or CLI:
-
-```bash
-# Set MESHY_API_KEY from your local .env
-npm run deploy:env
-
-# Or set manually
-gcloud run services update ninja-generator \
-  --region us-central1 \
-  --update-env-vars MESHY_API_KEY=your_key_here
-```
-
-**Redeploy after code changes**
-
-```bash
-npm run deploy
-```
-
-Source deploys are incremental — only changed source files are re-uploaded.
+- `svelte.config.js` uses `@sveltejs/adapter-vercel` **v6**. v7+ requires SvelteKit 3, so don't upgrade it without upgrading Kit.
+- In the Vercel project settings, the Framework Preset should be **SvelteKit**. Leave the Output Directory empty: the adapter writes `.vercel/output`.
+- Add `TRIPO_API_KEY`, `OPENAI_API_KEY` and/or `GEMINI_API_KEY`, and optionally `IMAGE_ENGINE`, under Project Settings → Environment Variables.
+- Vercel Functions cap request bodies at 4.5 MB. The 2D preview POSTed to `/api/generate` (about 1.5 MB) fits. `/api/proxy` streams its response, and streamed responses aren't subject to the 4.5 MB response limit, so the ~44 MB GLB still loads.
 
 ## Notes
 
-- The codebase uses **Svelte 4 syntax** (`export let`, `createEventDispatcher`, `on:event`) despite Svelte 5 being installed. Avoid migrating to runes unless intentional.
-- `MESHY_API_KEY` is accessed via `process.env` in `meshyApi.ts` — this only runs server-side (API routes). Public env vars use SvelteKit's `$env/static/public` convention; private vars use `$env/static/private` (not yet adopted here).
+- The codebase uses **Svelte 4 syntax** (`export let`, `createEventDispatcher`, `on:event`) even though Svelte 5 is installed. Don't migrate to runes unless that's the goal.
+- `hooks/read_hook.js` blocks Claude from reading `.env` files.
 - No test suite exists yet.

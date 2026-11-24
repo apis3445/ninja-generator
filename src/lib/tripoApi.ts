@@ -78,7 +78,7 @@ export async function createImageNinja(imageToken: string): Promise<string> {
 
 export async function rigNinja(modelTaskId: string): Promise<string> {
   const reqBody = {
-    type: 'rig_model',
+    type: 'animate_rig',
     original_model_task_id: modelTaskId,
     out_format: 'glb',
     spec: 'mixamo'

@@ -167,6 +167,10 @@
   // BASE_Y rotation swings it sideways.
   function normalizeModel() {
     if (!loadedScene) return;
+    // Tripo image-to-3D meshes can come out facing +X (shoulders along Z).
+    // If the model is deeper than it is wide, turn it -90° to face the camera.
+    const raw = new THREE.Box3().setFromObject(loadedScene).getSize(new THREE.Vector3());
+    if (raw.z > raw.x) loadedScene.rotation.y -= Math.PI / 2;
     loadedScene.parent?.updateWorldMatrix(true, false);
     loadedScene.updateMatrixWorld(true);
     // Measure in the PARENT frame (not the model's local frame): GLB
@@ -180,9 +184,10 @@
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     if (!size.y) return;
-    // ~1.7 parent units tall (×1.5 outer group ≈ 2.55 world) fills the
-    // fov-48 camera at z=4 with headroom; feet at the group origin.
-    const s = 1.7 / size.y;
+    // ~1.35 parent units tall (×1.5 outer group ≈ 2.0 world, same as the
+    // old Tripo framing) keeps the head clear of the top nav; feet at the
+    // group origin.
+    const s = 1.35 / size.y;
     // Uniform scale about the object's origin moves a point p to
     // t + s·(p − t), where t is the current position.
     const t = loadedScene.position;

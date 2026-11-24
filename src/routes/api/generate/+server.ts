@@ -1,31 +1,23 @@
 import { json, error } from '@sveltejs/kit'
 import { buildNinjaPrompt } from '$lib/ninjaPrompt'
-import { createNinja as meshyCreateText, createImageNinja as meshyCreateImage } from '$lib/meshyApi'
-import { createNinja as tripoCreateText, uploadImage as tripoUpload, createImageNinja as tripoCreateImage } from '$lib/tripoApi'
+import { createNinja, uploadImage, createImageNinja } from '$lib/tripoApi'
 import type { NinjaAnswers } from '$lib/ninjaPrompt'
 
 export async function POST({ request }: { request: Request }) {
   const { answers, imageUrl } = await request.json() as { answers: NinjaAnswers; imageUrl?: string }
 
-  const provider = answers.provider ?? 'tripo'
-  const prompt = buildNinjaPrompt(answers, provider)
+  const prompt = buildNinjaPrompt(answers)
 
   try {
     let taskId = ''
     if (imageUrl) {
-      if (provider === 'meshy') {
-        taskId = await meshyCreateImage(imageUrl)
-      } else {
-        const imageToken = await tripoUpload(imageUrl)
-        taskId = await tripoCreateImage(imageToken)
-      }
+      const imageToken = await uploadImage(imageUrl)
+      taskId = await createImageNinja(imageToken)
     } else {
-      taskId = provider === 'meshy'
-        ? await meshyCreateText(prompt)
-        : await tripoCreateText(prompt)
+      taskId = await createNinja(prompt)
     }
 
-    return json({ taskId, prompt, provider, isImageTo3D: !!imageUrl })
+    return json({ taskId, prompt, isImageTo3D: !!imageUrl })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     throw error(500, message)

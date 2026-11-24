@@ -8,8 +8,7 @@ type ImageEngine = 'openai' | 'gemini'
 
 export async function POST({ request }: { request: Request }) {
   const { answers, engine: requested } = await request.json()
-  const provider = answers.provider ?? 'tripo'
-  const prompt = buildNinjaPrompt(answers, provider)
+  const prompt = buildNinjaPrompt(answers)
 
   // Engine priority: request body > IMAGE_ENGINE in .env > 'openai'.
   // If the chosen engine has no API key, fall back to the one that does.

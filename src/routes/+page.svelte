@@ -13,7 +13,6 @@
   let error = "";
   let selectedAnimation: NinjaAnimation = "idle";
   let animPreviewIndex = 0;
-  let selectedProvider: NinjaAnswers["provider"] = "tripo";
 
   let progress2d = 0;
   let isRevealing2d = false;
@@ -211,18 +210,18 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          answers: { ...answers, provider: selectedProvider },
+          answers,
           imageUrl: previewImageUrl,
         }),
       });
 
       if (!res.ok) throw new Error("Failed to start 3D generation.");
 
-      const { taskId, provider } = await res.json();
+      const { taskId } = await res.json();
       // Keep creating3d true through the redirect so the button
       // doesn't flicker back before navigation completes.
       goto(
-        `/ninja/${taskId}?animation=${selectedAnimation}&provider=${provider}&specialty=${answers.specialty}&type=image-to-3d`,
+        `/ninja/${taskId}?animation=${selectedAnimation}&specialty=${answers.specialty}`,
       );
     } catch (err: any) {
       error = err.message || "Something went wrong. Please try again.";
@@ -237,7 +236,6 @@
     error = "";
     selectedAnimation = "idle";
     animPreviewIndex = 0;
-    selectedProvider = "tripo";
   }
 </script>
 
@@ -353,38 +351,12 @@
               </div>
             </div>
 
-            <div class="provider-picker">
-              <p class="anim-picker-label">Choose 3D Engine</p>
-              <div class="provider-cards">
-                <button
-                  class="provider-card"
-                  class:active={selectedProvider === "tripo"}
-                  on:click={() => (selectedProvider = "tripo")}
-                >
-                  <span class="anim-name">Tripo3D</span>
-                  <span class="anim-desc">High-fidelity · static pose · ~1–2 min</span>
-                </button>
-                <button
-                  class="provider-card"
-                  class:active={selectedProvider === "meshy"}
-                  on:click={() => (selectedProvider = "meshy")}
-                >
-                  <span class="anim-name">Meshy</span>
-                  <span class="anim-desc">Rigged + animations · ~2 min</span>
-                </button>
-              </div>
-            </div>
-
-            <div
-              class="anim-picker"
-              class:disabled={selectedProvider === "tripo"}
-            >
+            <div class="anim-picker">
               <p class="anim-picker-label">Choose Animation</p>
               <div class="anim-carousel">
                 <button
                   class="anim-arrow"
                   on:click={prevAnim}
-                  disabled={selectedProvider === "tripo"}
                   aria-label="Previous animation">‹</button
                 >
                 <div class="anim-cards">
@@ -392,7 +364,6 @@
                     <button
                       class="anim-card"
                       class:active={selectedAnimation === opt.value}
-                      disabled={selectedProvider === "tripo"}
                       on:click={() => selectAnim(opt.value, i)}
                     >
                       <span class="anim-name">{opt.label}</span>
@@ -403,16 +374,9 @@
                 <button
                   class="anim-arrow"
                   on:click={nextAnim}
-                  disabled={selectedProvider === "tripo"}
                   aria-label="Next animation">›</button
                 >
               </div>
-              {#if selectedProvider === "tripo"}
-                <p class="anim-hint" transition:fade={{ duration: 200 }}>
-                  Animations need the <strong>Meshy</strong> engine — Tripo3D
-                  generates a static pose.
-                </p>
-              {/if}
             </div>
 
             <div class="actions">

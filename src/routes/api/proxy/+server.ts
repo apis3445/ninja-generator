@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit'
 
-const ALLOWED_HOSTS = new Set(['assets.meshy.ai', 'tripo-data.rg1.data.tripo3d.com'])
+const ALLOWED_HOSTS = new Set(['tripo-data.rg1.data.tripo3d.com'])
 
 export async function GET({ url }: { url: URL }) {
   const target   = url.searchParams.get('url')
