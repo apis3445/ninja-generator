@@ -13,8 +13,8 @@
     "deploy:env": "gcloud run services update ninja-generator --project ninja-497502 --region us-central1 --update-env-vars \"BODY_SIZE_LIMIT=10M,$(grep -E '^(MESHY_API_KEY|TRIPO_API_KEY|GEMINI_API_KEY|OPENAI_API_KEY|IMAGE_ENGINE)=' .env | paste -sd, -)\""
   },
   "devDependencies": {
-    "@sveltejs/adapter-node": "^5.5.4",
-    "@sveltejs/kit": "^2.60.1",
+    "@sveltejs/adapter-node": "^6.0.5",
+    "@sveltejs/kit": "^3.4.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@types/node": "^25.9.0",
     "svelte": "^5.55.8",
