@@ -100,7 +100,10 @@
         >← Generate another</button
       >
 
-      <a href={modelUrl} download="ninja.glb" class="btn-download-glb">
+      <a
+        href={`/api/proxy?url=${encodeURIComponent(modelUrl)}&download=ninja.glb`}
+        class="btn-download-glb"
+      >
         ⬇ Download GLB
       </a>
     </div>

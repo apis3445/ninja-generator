@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/stores";
   import { onMount } from "svelte";
+  import { dev } from "$app/environment";
   import NinjaScene from "../../../components/NinjaScene.svelte";
   import SmokeAnimation from "../../../components/SmokeAnimation.svelte";
   import type { NinjaAnswers, NinjaAnimation } from "$lib/ninjaPrompt";
@@ -114,7 +115,9 @@
 
   function setModel(data: any, source = "unknown") {
     const glb = data.model_urls?.glb;
-    pendingModelUrl = glb ? `/api/proxy?url=${encodeURIComponent(glb)}` : null;
+    // Load straight from Tripo's CDN (it sends Access-Control-Allow-Origin: *).
+    // Streaming 40–60 MB GLBs through /api/proxy was far slower.
+    pendingModelUrl = glb ?? null;
     revealing = true;
   }
 
@@ -123,6 +126,14 @@
   }
 
   onMount(() => {
+    // Dev only: ?glb=<url> loads an existing (rigged) model directly, so
+    // animations can be tuned without paying for a new Tripo rig task.
+    const testGlb = dev ? $page.url.searchParams.get("glb") : null;
+    if (testGlb) {
+      setModel({ model_urls: { glb: testGlb } }, "dev-glb");
+      return;
+    }
+
     // Tripo: model → rig, then the hand-coded animations play on the rig
     return poll(ninjaId, () => startRig(ninjaId));
   });

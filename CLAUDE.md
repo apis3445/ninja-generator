@@ -63,4 +63,6 @@ SvelteKit 2 app built with `@sveltejs/adapter-vercel` and deployed to Vercel. It
 
 - The codebase uses **Svelte 4 syntax** (`export let`, `createEventDispatcher`, `on:event`) even though Svelte 5 is installed. Don't migrate to runes unless that's the goal.
 - `hooks/read_hook.js` blocks Claude from reading `.env` files.
+- Animations in `AnimatedNinja.svelte` rotate bones in the **character frame** via `set(bone, pitch, yaw, roll)` (converted per bone at rest), so they don't depend on a rig's local bone axes.
+- Dev only: `/ninja/<anything>?animation=jump&glb=<url-encoded GLB url>` loads an existing rigged model directly. Use it to tune animations without paying for a new Tripo rig (each normal ninja page load starts a rig task).
 - No test suite exists yet.

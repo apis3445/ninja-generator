@@ -46,23 +46,46 @@
     return null;
   }
 
-  function storeOrig(obj: THREE.Object3D) {
-    if (!obj.userData.origRot) {
-      obj.userData.origRot = {
-        x: obj.rotation.x,
-        y: obj.rotation.y,
-        z: obj.rotation.z,
-      };
+  // Each rig orients its bones differently, so rotations are given in the
+  // CHARACTER's frame (the `group`, where the ninja faces +Z and its left
+  // is +X) and converted once, at rest, into each bone's parent space:
+  //   pitch = about +X: limb swings back (+) / forward (−); spine leans forward (+)
+  //   yaw   = about +Y: turn
+  //   roll  = about +Z: hanging limb swings toward the character's left (+)
+  function storeRest(bone: THREE.Object3D) {
+    if (bone.userData.rest || !bone.parent || !group) return;
+    const groupQ = group.getWorldQuaternion(new THREE.Quaternion());
+    const parentQ = bone.parent.getWorldQuaternion(new THREE.Quaternion());
+    // group frame → bone's parent frame
+    const toParent = groupQ.clone().invert().multiply(parentQ).invert();
+
+    // Elbow/knee hinge: perpendicular to the bone and to the character's
+    // forward axis, so flexing folds the limb forward (+) toward +Z.
+    let hinge: THREE.Vector3 | null = null;
+    const child = bone.children.find((c: any) => c.isBone);
+    if (child) {
+      const a = bone.getWorldPosition(new THREE.Vector3());
+      const b = child.getWorldPosition(new THREE.Vector3());
+      const dir = b.sub(a).applyQuaternion(groupQ.clone().invert()).normalize();
+      const h = dir.cross(new THREE.Vector3(0, 0, 1));
+      if (h.lengthSq() > 1e-6) hinge = h.normalize().applyQuaternion(toParent);
     }
+
+    bone.userData.rest = {
+      hinge,
+      q: bone.quaternion.clone(),
+      x: new THREE.Vector3(1, 0, 0).applyQuaternion(toParent),
+      y: new THREE.Vector3(0, 1, 0).applyQuaternion(toParent),
+      z: new THREE.Vector3(0, 0, 1).applyQuaternion(toParent),
+    };
   }
 
-  function resetRot(obj: THREE.Object3D | null) {
-    if (!obj?.userData.origRot) return;
-    const o = obj.userData.origRot;
-    obj.rotation.x = o.x;
-    obj.rotation.y = o.y;
-    obj.rotation.z = o.z;
+  function resetRot(bone: THREE.Object3D | null) {
+    if (!bone?.userData.rest) return;
+    bone.quaternion.copy(bone.userData.rest.q);
   }
+
+  const _q = new THREE.Quaternion();
 
   function scanModel() {
     const root = loadedScene ?? group;
@@ -81,7 +104,7 @@
         child.skeleton.bones.forEach((b: THREE.Object3D) => {
           if (!boneSet.has(b)) {
             boneSet.add(b);
-            storeOrig(b);
+            storeRest(b);
           }
         });
       }
@@ -91,7 +114,7 @@
       root.traverse((child: any) => {
         if (child.isBone && !boneSet.has(child)) {
           boneSet.add(child);
-          storeOrig(child);
+          storeRest(child);
         }
       });
     }
@@ -140,20 +163,6 @@
       console.warn('[ninja] ARM BONES MISSING — all bone names:', allBones.map(b => b.name).join(', '));
     }
 
-    // Log origRot for every tracked bone so we can see exact starting rotations
-    const fmt = (b: THREE.Object3D | null) => b
-      ? `x=${b.userData.origRot.x.toFixed(3)} y=${b.userData.origRot.y.toFixed(3)} z=${b.userData.origRot.z.toFixed(3)}`
-      : 'MISSING';
-    console.log('[ninja] origRot values:');
-    console.log('  rightLeg :', fmt(rightLegRoot));
-    console.log('  leftLeg  :', fmt(leftLegRoot));
-    console.log('  rightKnee:', fmt(rightKneeRoot));
-    console.log('  leftKnee :', fmt(leftKneeRoot));
-    console.log('  rightArm :', fmt(rightArmRoot));
-    console.log('  leftArm  :', fmt(leftArmRoot));
-    console.log('  hips     :', fmt(hipsRoot));
-    console.log('  spine    :', fmt(spineRoot));
-
     scanned = true;
   }
 
@@ -162,7 +171,7 @@
     loadedScene = null;
   }
 
-  // Center the model and normalize its height. Meshy GLBs come with an
+  // Center the model and normalize its height. GLBs come with an
   // arbitrary origin, so without this the body sits off-center and the
   // BASE_Y rotation swings it sideways.
   function normalizeModel() {
@@ -212,12 +221,21 @@
     if (!scanned) scanModel();
 
     // ── Helpers ────────────────────────────────────────────────────
-    const set = (bone: THREE.Object3D | null, dx = 0, dy = 0, dz = 0) => {
-      if (!bone?.userData.origRot) return;
-      const o = bone.userData.origRot;
-      bone.rotation.x = o.x + dx;
-      bone.rotation.y = o.y + dy;
-      bone.rotation.z = o.z + dz;
+    // flex(bone, angle): bend at the joint so the limb folds forward/up
+    const flex = (bone: THREE.Object3D | null, angle: number) => {
+      const r = bone?.userData.rest;
+      if (!bone || !r?.hinge) return;
+      bone.quaternion.copy(r.q).premultiply(_q.setFromAxisAngle(r.hinge, angle));
+    };
+
+    // set(bone, pitch, yaw, roll): rest pose + rotation in the character frame
+    const set = (bone: THREE.Object3D | null, pitch = 0, yaw = 0, roll = 0) => {
+      const r = bone?.userData.rest;
+      if (!bone || !r) return;
+      bone.quaternion.copy(r.q);
+      if (roll) bone.quaternion.premultiply(_q.setFromAxisAngle(r.z, roll));
+      if (yaw) bone.quaternion.premultiply(_q.setFromAxisAngle(r.y, yaw));
+      if (pitch) bone.quaternion.premultiply(_q.setFromAxisAngle(r.x, pitch));
     };
     const reset = (...bones: (THREE.Object3D | null)[]) =>
       bones.forEach(resetRot);
@@ -236,23 +254,21 @@
       group.rotation.set(0, BASE_Y, 0);
       group.position.set(0, arc * 0.18, 0);
 
-      // Thighs back, lower legs fold forward (axes are inverted for this model)
-      set(rightLegRoot,  -arc * 1.4 + land * 0.15, 0, 0);
-      set(leftLegRoot,   -arc * 1.1 + land * 0.12, 0, 0);
-      set(rightKneeRoot,  arc * 1.8 - land * 0.3,  0, 0);
-      set(leftKneeRoot,   arc * 1.5 - land * 0.3,  0, 0);
+      // Tuck: thighs come up in front, lower legs fold back under
+      set(rightLegRoot,  -arc * 1.2 + land * 0.15);
+      set(leftLegRoot,   -arc * 0.9 + land * 0.12);
+      set(rightKneeRoot,  arc * 1.7 + land * 0.3);
+      set(leftKneeRoot,   arc * 1.5 + land * 0.3);
 
-      // Arms: small deltas off the rest pose only — absolute targets
-      // (setAbs) flip unpredictably across Meshy rigs. They sweep back
-      // and flare on the rise like a diving leap, forearms trailing.
-      set(rightArmRoot,  arc * 0.55, -arc * 0.2,  arc * 0.3);
-      set(leftArmRoot,   arc * 0.55,  arc * 0.2, -arc * 0.3);
-      set(rightForeArmRoot, -arc * 0.4, 0, 0);
-      set(leftForeArmRoot,   arc * 0.4, 0, 0);
+      // Arms sweep back and flare out on the rise, forearms trailing
+      set(rightArmRoot, arc * 0.6, 0, -arc * 0.35);
+      set(leftArmRoot,  arc * 0.6, 0,  arc * 0.35);
+      set(rightForeArmRoot, -arc * 0.4);
+      set(leftForeArmRoot,  -arc * 0.4);
 
-      // Forward lean purely from spine/hips — avoids group compound rotation
-      set(spineRoot, -arc * 0.35, 0, 0);
-      set(hipsRoot,   arc * 0.12, 0, 0);
+      // Forward lean from the spine; hips tip back a touch
+      set(spineRoot, arc * 0.3);
+      set(hipsRoot, -arc * 0.1);
     } else if (animation === "kick") {
       // ── Ninja side kick: chamber → pivot & extend → retract → plant ──
       // Phased timeline instead of raw sines: each seg() eases 0→1 over
@@ -278,43 +294,50 @@
       group.rotation.set(0, BASE_Y + strike * 0.5, 0);
       group.position.set(0, -guard * 0.02 + strike * 0.04, 0);
 
-      // Kicking leg (right): X lifts the thigh, Z swings it out to the
-      // side at extension. If the leg swings inward on a given rig,
-      // flip the sign of the Z term.
-      set(rightLegRoot, -lift * 1.15, 0, strike * 0.55);
-      set(rightKneeRoot, fold, 0, 0);
+      // Kicking leg (right): pitch lifts the thigh in front, roll swings
+      // it out to the character's right at extension.
+      set(rightLegRoot, -lift * 1.15, 0, -strike * 0.9);
+      set(rightKneeRoot, fold);
 
       // Support leg: slight bend for balance
-      set(leftLegRoot,  lift * 0.15, 0, 0);
-      set(leftKneeRoot, lift * 0.25, 0, 0);
+      set(leftLegRoot,  -lift * 0.15);
+      set(leftKneeRoot,  lift * 0.25);
 
-      // Torso leans away from the kick to counterbalance — the diagonal
-      // body line that sells a side kick. Hips add a touch of the tilt.
-      set(spineRoot, strike * 0.1, -strike * 0.15, -strike * 0.38);
-      set(hipsRoot,  0, strike * 0.25, strike * 0.1);
+      // Torso leans away from the kick (to the character's left) to
+      // counterbalance — the diagonal body line that sells a side kick.
+      set(spineRoot, strike * 0.1, 0, -strike * 0.35);
 
-      // Arms crossed tight in front of the chest: forearms fold hard,
-      // upper arms come slightly forward/in. Small deltas off the rest
-      // pose only — absolute targets flip unpredictably across rigs.
-      set(rightArmRoot,  guard * 0.35, 0, 0);
-      set(leftArmRoot,  -guard * 0.3,  0, 0);
-      set(rightForeArmRoot, -guard * 0.95, 0, 0);
-      set(leftForeArmRoot,   guard * 0.9,  0, 0);
+      // Guard: upper arms come forward and in, forearms fold up
+      set(rightArmRoot, -guard * 0.5, 0,  guard * 0.3);
+      set(leftArmRoot,  -guard * 0.5, 0, -guard * 0.3);
+      set(rightForeArmRoot, -guard * 1.2);
+      set(leftForeArmRoot,  -guard * 1.2);
+      reset(hipsRoot);
     } else {
-      // ── Battle idle: weight shift, arms stay near A-pose ─────────
-      const bob = Math.sin(t * 1.2);
-      const step = Math.sin(t * 0.9);
+      // ── Battle idle: low fighting stance, guard up, breathing bounce ──
+      const breathe = Math.sin(t * 2.2);        // quick, light bounce
+      const sway = Math.sin(t * 0.8);           // slow weight shift
       group.rotation.set(0, BASE_Y, 0);
-      group.position.set(0, Math.abs(bob) * 0.012, 0);
+      // Bent knees lower the hips; drop the body so the feet stay planted
+      group.position.set(0, -0.08 + breathe * 0.012, 0);
 
-      // Use set() (not setAbs) so origRot.z is preserved → arms stay at natural A-pose angle
-      set(leftArmRoot, bob * 0.05, 0, 0);
-      set(rightArmRoot, -bob * 0.05, 0, 0);
-      set(leftLegRoot, step * 0.05, 0, 0);
-      set(rightLegRoot, -step * 0.05, 0, 0);
-      set(leftKneeRoot, -Math.max(0, step) * 0.12, 0, 0);
-      set(rightKneeRoot, -Math.max(0, -step) * 0.12, 0, 0);
-      reset(leftForeArmRoot, rightForeArmRoot, hipsRoot, spineRoot);
+      // Wide stance, knees bent; bounce flexes the knees a little more
+      const bend = 0.42 + breathe * 0.04;
+      set(leftLegRoot,  -bend - sway * 0.04, 0,  0.14);
+      set(rightLegRoot, -bend + sway * 0.04, 0, -0.14);
+      set(leftKneeRoot,  bend * 1.7);
+      set(rightKneeRoot, bend * 1.7);
+
+      // Lean into the fight and turn the chest slightly toward the lead side
+      set(spineRoot, 0.18 + breathe * 0.02, 0.15 + sway * 0.03);
+
+      // Guard: upper arms forward and in from the A-pose, fists up.
+      // Lead (left) hand out front, rear (right) hand tucked near the chin.
+      set(leftArmRoot,  -0.85 + breathe * 0.03, 0, -0.6);
+      set(rightArmRoot, -0.6 + breathe * 0.03, 0,  0.65);
+      flex(leftForeArmRoot,  1.6);
+      flex(rightForeArmRoot, 2.1);
+      reset(hipsRoot);
     }
   });
 </script>
